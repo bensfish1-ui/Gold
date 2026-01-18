@@ -70,6 +70,7 @@ LONDON_SESSION_END = "16:00"
 NY_SESSION_ENABLED = True
 NY_SESSION_START = "13:00"
 NY_SESSION_END = "22:00"
+ATR_LOOKBACK_VOLATILITY = 50
 
 # =============================================================================
 # LOGGING
