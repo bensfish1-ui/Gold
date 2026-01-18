@@ -1,15 +1,7 @@
-# Gold Trading Bot Dependencies
-
-# Core libraries
 requests==2.31.0
 pandas==2.2.0
 numpy==1.26.3
-
-# Optional: For more advanced technical analysis
-# ta==0.11.0
-
-# For datetime handling
 python-dateutil==2.8.2
-
-# For timezone support
 pytz==2024.1
+python-telegram-bot==13.15
+schedule
