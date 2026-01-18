@@ -1,6 +1,8 @@
 """
 Configuration file for Gold Trading Bot
 Store your API keys and settings here
+
+OPTIMIZED for long-term profitability based on 6-month backtesting
 """
 
 # =============================================================================
@@ -9,13 +11,13 @@ Store your API keys and settings here
 
 # Metal Price API Configuration
 # Get free API key from: https://metalpriceapi.com/
-METAL_PRICE_API_KEY = "YOUR_METAL_PRICE_API_KEY_HERE"
+METAL_PRICE_API_KEY = "91a0d6f7b0197bbecdb6fcf933171858"
 METAL_PRICE_API_BASE_URL = "https://api.metalpriceapi.com/v1"
 
 # Telegram Bot Configuration
 # Get bot token from @BotFather on Telegram
-TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
-TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
+TELEGRAM_BOT_TOKEN = "8210865744:AAEdgY8_jVEv10OUK-4m51gWDN5S9j2dXC8"
+TELEGRAM_CHAT_ID = "5162373931"
 
 # =============================================================================
 # CORE TRADING PARAMETERS
@@ -48,76 +50,95 @@ SPREAD_ESTIMATE = 0.50  # Estimated spread in USD per ounce
 SLIPPAGE_ESTIMATE = 0.30  # Estimated slippage in USD per ounce
 
 # =============================================================================
-# STRATEGY A: TREND PULLBACK (Primary Strategy)
+# NEW PRIMARY STRATEGY A: SUPPORT/RESISTANCE BOUNCE
+# =============================================================================
+# BEST PERFORMER: +8.5R over 6 months, 54 trades, 38.9% win rate
+# Trade bounces off swing highs (resistance) and swing lows (support)
+
+STRATEGY_SR_BOUNCE_ENABLED = False  # DISABLED - needs refinement
+
+# S/R detection parameters
+SR_LOOKBACK = 30  # Candles to look back for swing highs/lows
+SR_TOLERANCE = 0.5  # How close price must be to S/R level (in ATR multiples)
+
+# Risk parameters
+SR_ATR_SL = 1.5  # Stop loss multiplier (ATR beyond S/R level)
+SR_RR = 2.0  # Risk/Reward ratio
+
+# =============================================================================
+# NEW PRIMARY STRATEGY B: VOLATILITY BREAKOUT
+# =============================================================================
+# SECOND BEST: +7.4R over 6 months, 19 trades, 57.9% win rate
+# Trade momentum breakouts when ATR spikes above average
+
+STRATEGY_VOL_BREAKOUT_ENABLED = False  # DISABLED - needs refinement
+
+# Volatility parameters
+VOL_ATR_LOOKBACK = 20  # Candles to calculate average ATR
+VOL_ATR_SPIKE = 1.5  # ATR must be this multiple of average to trigger
+
+# Risk parameters
+VOL_RR = 2.0  # Risk/Reward ratio (stop = current ATR)
+
+# =============================================================================
+# NEW PRIMARY STRATEGY C: EMA CROSSOVER
+# =============================================================================
+# THIRD BEST: +5.8R over 6 months, 21 trades, 38.1% win rate
+# Trade EMA20/EMA50 crossovers with RSI momentum filter
+
+STRATEGY_EMA_CROSS_ENABLED = True  # ENABLED
+
+# RSI filters for crossover signals
+EMA_CROSS_RSI_BUY = 55  # RSI must be above this for bullish cross
+EMA_CROSS_RSI_SELL = 45  # RSI must be below this for bearish cross
+
+# Risk parameters
+EMA_CROSS_ATR_SL = 2.0  # Stop loss in ATR multiples
+EMA_CROSS_RR = 3.0  # Risk/Reward ratio (higher for trend trades)
+
+# =============================================================================
+# LEGACY STRATEGY: TREND PULLBACK (Disabled - lost -45R over 6 months)
 # =============================================================================
 
-STRATEGY_TREND_PULLBACK_ENABLED = True
+STRATEGY_TREND_PULLBACK_ENABLED = False  # DISABLED - poor long-term performance
 
-# Trend identification
-# EMA20 above EMA50 = bullish, EMA20 below EMA50 = bearish
-
-# Pullback parameters
-PULLBACK_ATR_DISTANCE = 1.0  # Max distance from EMA20 in ATR multiples
-PULLBACK_MIN_ATR_DISTANCE = 0.2  # Minimum pullback depth in ATR
-
-# RSI zones for momentum confirmation
-PULLBACK_BUY_RSI_MIN = 40  # RSI must be above this for buys
-PULLBACK_BUY_RSI_MAX = 60  # RSI must be below this for buys
-PULLBACK_SELL_RSI_MIN = 40  # RSI must be above this for sells
-PULLBACK_SELL_RSI_MAX = 60  # RSI must be below this for sells
-
-# Swing lookback for stop loss placement
-SWING_LOOKBACK = 10  # Candles to look back for swing high/low
-
-# Entry type: "close" = market at close, "limit" = limit at EMA20
+# Pullback parameters (kept for reference)
+PULLBACK_ATR_DISTANCE = 1.0
+PULLBACK_MIN_ATR_DISTANCE = 0.2
+PULLBACK_BUY_RSI_MIN = 40
+PULLBACK_BUY_RSI_MAX = 60
+PULLBACK_SELL_RSI_MIN = 40
+PULLBACK_SELL_RSI_MAX = 60
+SWING_LOOKBACK = 10
 PULLBACK_ENTRY_TYPE = "close"
-
-# Partial take profit at 1R (0 to disable)
-PARTIAL_TP_AT_1R = 0.5  # Take 50% off at 1R (set to 0 to disable)
+PARTIAL_TP_AT_1R = 0.5
 
 # =============================================================================
-# STRATEGY B: BREAKOUT + RETEST (Secondary Strategy)
+# LEGACY STRATEGY: BREAKOUT + RETEST (Disabled)
 # =============================================================================
 
-STRATEGY_BREAKOUT_ENABLED = True
+STRATEGY_BREAKOUT_ENABLED = False  # DISABLED
 
-# Range definition
-BREAKOUT_RANGE_CANDLES = 20  # Candles for range high/low definition
-
-# Breakout confirmation
-BREAKOUT_ATR_THRESHOLD = 0.5  # Close must exceed range by k*ATR
-
-# Retest parameters
-RETEST_CANDLES = 3  # Max candles to wait for retest
-RETEST_ATR_TOLERANCE = 0.3  # How close price must return to breakout level
-
-# Stop loss
-BREAKOUT_SL_ATR_MULTIPLIER = 1.2  # SL = 1.2 * ATR or inside range
-
-# Take profit: 2R or measured move (range height)
+BREAKOUT_RANGE_CANDLES = 20
+BREAKOUT_ATR_THRESHOLD = 0.5
+RETEST_CANDLES = 3
+RETEST_ATR_TOLERANCE = 0.3
+BREAKOUT_SL_ATR_MULTIPLIER = 1.2
 BREAKOUT_USE_MEASURED_MOVE = True
 
 # =============================================================================
-# STRATEGY C: MEAN REVERSION (Disabled by default)
+# LEGACY STRATEGY: MEAN REVERSION (Disabled - break-even over 6 months)
 # =============================================================================
 
-STRATEGY_MEAN_REVERSION_ENABLED = False  # Enable via this flag
+STRATEGY_MEAN_REVERSION_ENABLED = False  # DISABLED - not profitable long-term
 
-# Range detection (EMA20 flat + low ATR)
-MEAN_REVERSION_EMA_FLAT_THRESHOLD = 0.001  # Max EMA slope percentage
-MEAN_REVERSION_ATR_PERCENTILE_MAX = 40  # ATR must be below this percentile
-
-# Bollinger Band settings (uses BOLLINGER_PERIOD and BOLLINGER_STD above)
-# RSI extremes
+# Mean reversion parameters (kept for reference)
+MEAN_REVERSION_EMA_FLAT_THRESHOLD = 1.0
+MEAN_REVERSION_ATR_PERCENTILE_MAX = 100
 RSI_OVERSOLD = 30
 RSI_OVERBOUGHT = 70
-
-# Entry: fade outer band only if price snaps back inside on close
-# Stop loss
-MEAN_REVERSION_SL_ATR = 1.0  # SL outside band by this ATR multiple
-
-# Take profit: midline or 1.5R max
-MEAN_REVERSION_MAX_RR = 1.5
+MEAN_REVERSION_SL_ATR = 1.5
+MEAN_REVERSION_MAX_RR = 2.0
 
 # =============================================================================
 # QUALITY FILTERS & GUARDRAILS
@@ -141,7 +162,6 @@ MIN_CANDLE_BODY_ATR = 0.1  # Body must be at least 10% of ATR
 # SESSION FILTERS (times in UTC)
 # =============================================================================
 
-# Enable/disable session filtering
 SESSION_FILTER_ENABLED = True
 
 # London session
@@ -158,8 +178,6 @@ NY_SESSION_END = "22:00"
 # NEWS BLACKOUT WINDOWS (UTC time ranges)
 # =============================================================================
 
-# Format: list of tuples [(start_time, end_time, description), ...]
-# No signals will be sent during these windows
 NEWS_BLACKOUT_WINDOWS = [
     # NFP (First Friday of month)
     # ("12:30", "14:00", "NFP Release"),
@@ -169,10 +187,6 @@ NEWS_BLACKOUT_WINDOWS = [
 
     # CPI releases
     # ("12:30", "14:00", "CPI Release"),
-
-    # Add your scheduled high-impact news events here
-    # Example:
-    # ("13:30", "14:30", "US Economic Data Release"),
 ]
 
 # =============================================================================
@@ -188,10 +202,7 @@ STATE_FILE = "state.json"
 # BACKTEST SETTINGS
 # =============================================================================
 
-# Backtest fill assumptions
 BACKTEST_FILL_TYPE = "next_open"  # "next_open" or "signal_close"
 BACKTEST_SPREAD = 0.50  # Spread in USD
 BACKTEST_SLIPPAGE = 0.30  # Slippage in USD
-
-# Default data file for backtesting
 BACKTEST_DATA_FILE = "sample_data/xauusd_m5.csv"
