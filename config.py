@@ -79,3 +79,4 @@ ATR_LOOKBACK_VOLATILITY = 50
 LOG_LEVEL = "INFO"
 LOG_FILE = "logs/gold_bot.log"
 STATE_FILE = "state.json"
+NEWS_BLACKOUT_WINDOWS = []
