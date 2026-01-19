@@ -41,7 +41,12 @@ class BotState:
             'signals_today': 0,
             'last_date': None,
             'last_evaluation_time': None,
-            'consecutive_no_signals': 0
+            'consecutive_no_signals': 0,
+            'last_heartbeat': None,
+            'last_daily_summary': None,
+            'total_r': 0.0,
+            'starting_bank': 1000.0,
+            'trades_history': []
         }
 
     def _save_state(self):
@@ -127,12 +132,101 @@ class BotState:
             'signals_today': self.state.get('signals_today', 0),
             'last_buy': self.state.get('last_signal_buy'),
             'last_sell': self.state.get('last_signal_sell'),
-            'consecutive_no_signals': self.state.get('consecutive_no_signals', 0)
+            'consecutive_no_signals': self.state.get('consecutive_no_signals', 0),
+            'total_r': self.state.get('total_r', 0.0),
+            'starting_bank': self.state.get('starting_bank', 1000.0)
         }
 
     def reset(self):
         """Reset state to defaults"""
         self.state = self._get_default_state()
+        self._save_state()
+
+    def record_trade_result(self, r_result: float, signal: Dict[str, Any] = None):
+        """
+        Record a completed trade result
+
+        Args:
+            r_result: R-multiple result (e.g., 2.0 for 2R win, -1.0 for loss)
+            signal: optional signal dict for history
+        """
+        self.state['total_r'] = self.state.get('total_r', 0.0) + r_result
+
+        # Add to history
+        history = self.state.get('trades_history', [])
+        history.append({
+            'timestamp': datetime.now().isoformat(),
+            'r_result': r_result,
+            'direction': signal.get('direction') if signal else None
+        })
+        # Keep last 100 trades
+        self.state['trades_history'] = history[-100:]
+        self._save_state()
+
+    def set_starting_bank(self, amount: float):
+        """Set the starting bank amount"""
+        self.state['starting_bank'] = amount
+        self._save_state()
+
+    def get_bank_status(self) -> Dict[str, Any]:
+        """Get current bank status and growth"""
+        starting = self.state.get('starting_bank', 1000.0)
+        total_r = self.state.get('total_r', 0.0)
+        risk_per_trade = starting * 0.01  # 1% risk
+        profit = total_r * risk_per_trade
+        current_bank = starting + profit
+        growth_pct = (profit / starting) * 100 if starting > 0 else 0
+
+        return {
+            'starting_bank': starting,
+            'current_bank': current_bank,
+            'total_r': total_r,
+            'profit': profit,
+            'growth_pct': growth_pct,
+            'total_signals': self.state.get('total_signals', 0)
+        }
+
+    def should_send_heartbeat(self, interval_hours: int = 2) -> bool:
+        """Check if it's time to send a heartbeat message"""
+        last_hb = self.state.get('last_heartbeat')
+        if last_hb is None:
+            return True
+
+        try:
+            last_time = datetime.fromisoformat(last_hb)
+            hours_elapsed = (datetime.now() - last_time).total_seconds() / 3600
+            return hours_elapsed >= interval_hours
+        except (ValueError, TypeError):
+            return True
+
+    def record_heartbeat(self):
+        """Record that a heartbeat was sent"""
+        self.state['last_heartbeat'] = datetime.now().isoformat()
+        self._save_state()
+
+    def should_send_daily_summary(self) -> bool:
+        """Check if it's time to send daily summary (9am UTC)"""
+        now = datetime.utcnow()
+
+        # Only at 9am hour
+        if now.hour != 9:
+            return False
+
+        # Check if already sent today
+        last_summary = self.state.get('last_daily_summary')
+        if last_summary:
+            try:
+                last_date = datetime.fromisoformat(last_summary).date()
+                if last_date == now.date():
+                    return False  # Already sent today
+            except (ValueError, TypeError):
+                pass
+
+        return True
+
+    def record_daily_summary(self):
+        """Record that daily summary was sent"""
+        self.state['last_daily_summary'] = datetime.now().isoformat()
         self._save_state()
 
 

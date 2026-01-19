@@ -10,6 +10,8 @@ Features:
 - Volatility filters (chop/chaos detection)
 - Cooldown management
 - Quality threshold filtering
+- Daily summary at 9am UTC with bank growth tracking
+- 2-hourly heartbeat messages when no signals
 - Comprehensive logging
 """
 
@@ -56,6 +58,7 @@ class GoldTradingBot:
         self.last_refresh = None
         self.scan_count = 0
         self.startup_time = datetime.now()
+        self.signals_sent_today = 0
 
     def send_telegram_message(self, message: str) -> bool:
         """
@@ -96,15 +99,102 @@ class GoldTradingBot:
         Returns:
             bool - success status
         """
+        # Add bank status to signal message
+        bank_status = self.state.get_bank_status()
         message = format_telegram_message(signal)
+
+        # Add running total
+        message += f"\n\n📊 <b>Running Total:</b>"
+        message += f"\n  Total R: {bank_status['total_r']:+.1f}R"
+        message += f"\n  Bank: ${bank_status['current_bank']:,.2f} ({bank_status['growth_pct']:+.1f}%)"
+
         success = self.send_telegram_message(message)
 
         if success:
             logger.info(f"Telegram alert sent: {signal['direction']} {signal['setup_type']}")
+            self.signals_sent_today += 1
         else:
             logger.error("Failed to send Telegram alert")
 
         return success
+
+    def send_daily_summary(self):
+        """Send daily summary at 9am UTC with bank growth"""
+        bank_status = self.state.get_bank_status()
+        stats = self.state.get_stats()
+
+        message = "☀️ <b>GOLD BOT - Daily Summary</b>\n"
+        message += "━━━━━━━━━━━━━━━━━━━━\n\n"
+
+        message += "📊 <b>Bank Status</b>\n"
+        message += f"  Starting: ${bank_status['starting_bank']:,.2f}\n"
+        message += f"  Current:  ${bank_status['current_bank']:,.2f}\n"
+        message += f"  Profit:   ${bank_status['profit']:+,.2f} ({bank_status['growth_pct']:+.1f}%)\n\n"
+
+        message += "📈 <b>Performance</b>\n"
+        message += f"  Total R:  {bank_status['total_r']:+.1f}R\n"
+        message += f"  Signals:  {stats['total_signals']} total\n"
+        message += f"  Today:    {stats['signals_today']} signals\n\n"
+
+        # Runtime
+        runtime = datetime.now() - self.startup_time
+        hours = int(runtime.total_seconds() // 3600)
+        mins = int((runtime.total_seconds() % 3600) // 60)
+        message += f"⏱️ <b>Uptime:</b> {hours}h {mins}m\n\n"
+
+        message += "<i>Bot monitoring XAUUSD for EMA Cross setups...</i>"
+
+        if self.send_telegram_message(message):
+            self.state.record_daily_summary()
+            logger.info("Daily summary sent")
+
+    def send_heartbeat(self):
+        """Send 'still working' message when no signals for 2 hours"""
+        stats = self.state.get_stats()
+        bank_status = self.state.get_bank_status()
+
+        # Get current price if available
+        price_str = ""
+        try:
+            price = get_current_gold_price()
+            if price:
+                price_str = f"\n  Gold: ${price:,.2f}"
+        except:
+            pass
+
+        message = "💓 <b>Gold Bot Status</b>\n"
+        message += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        message += "✅ Bot is running - no trades picked\n\n"
+
+        message += f"📊 <b>Current Status</b>{price_str}\n"
+        message += f"  Bank: ${bank_status['current_bank']:,.2f}\n"
+        message += f"  Total R: {bank_status['total_r']:+.1f}R\n"
+        message += f"  Signals today: {stats['signals_today']}\n\n"
+
+        # Session status
+        in_session, session_info = is_trading_session_active()
+        if in_session:
+            message += f"🟢 Active session: {session_info}\n"
+        else:
+            message += f"🔴 Outside session hours\n"
+
+        message += "\n<i>Scanning continues every 5 minutes...</i>"
+
+        if self.send_telegram_message(message):
+            self.state.record_heartbeat()
+            logger.info("Heartbeat message sent")
+
+    def check_scheduled_messages(self):
+        """Check and send scheduled messages (daily summary, heartbeat)"""
+        # Check for daily summary (9am UTC)
+        if self.state.should_send_daily_summary():
+            self.send_daily_summary()
+
+        # Check for heartbeat (every 2 hours if no signals)
+        if self.state.should_send_heartbeat(interval_hours=2):
+            # Only send heartbeat if no signals sent recently
+            if self.state.get_stats()['consecutive_no_signals'] >= 12:  # ~1 hour of no signals
+                self.send_heartbeat()
 
     def refresh_candles(self) -> bool:
         """
@@ -254,6 +344,9 @@ class GoldTradingBot:
         logger.info(f"Scan #{self.scan_count} - {timestamp}")
         logger.info(f"{'='*60}")
 
+        # Check for scheduled messages (daily summary, heartbeat)
+        self.check_scheduled_messages()
+
         # Run evaluation
         result = self.evaluate_market()
 
@@ -318,11 +411,18 @@ class GoldTradingBot:
         logger.info(f"Cooldown: {config.COOLDOWN_MINUTES} minutes per direction")
         logger.info("=" * 60)
 
+        # Get bank status
+        bank_status = self.state.get_bank_status()
+
         # Send startup notification
         startup_msg = (
             "🤖 <b>Gold Trading Bot Activated</b>\n\n"
-            f"Monitoring XAUUSD on {config.TIMEFRAME} timeframe\n"
-            f"Quality threshold: {config.MIN_SIGNAL_QUALITY:.0%}\n\n"
+            f"📊 Strategy: EMA Crossover\n"
+            f"⏱️ Timeframe: {config.TIMEFRAME}\n"
+            f"💰 Bank: ${bank_status['current_bank']:,.2f}\n"
+            f"📈 Total R: {bank_status['total_r']:+.1f}R\n\n"
+            "✅ Daily summary at 9am UTC\n"
+            "✅ Heartbeat every 2 hours\n\n"
             "<i>Scanning for high-probability setups...</i>"
         )
 
@@ -382,22 +482,14 @@ def main():
     """
     Entry point - validates configuration and starts bot
     """
-    # Check API keys
-    if config.METAL_PRICE_API_KEY == "YOUR_METAL_PRICE_API_KEY_HERE":
+    # Check if using Railway environment variables
+    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
         print("\n" + "=" * 60)
-        print("ERROR: API keys not configured!")
+        print("ERROR: Telegram not configured!")
         print("=" * 60)
-        print("\nPlease edit config.py and add your API keys:")
-        print("  1. METAL_PRICE_API_KEY from https://metalpriceapi.com/")
-        print("  2. TELEGRAM_BOT_TOKEN from @BotFather")
-        print("  3. TELEGRAM_CHAT_ID (your chat ID)")
-        print("\nSee README.md for detailed setup instructions.")
+        print("\nSet TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
         print("=" * 60 + "\n")
         return
-
-    if config.TELEGRAM_BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
-        print("\nWARNING: Telegram not configured. Alerts will not be sent.")
-        print("Configure TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in config.py\n")
 
     # Ensure directories exist
     ensure_directories()
@@ -409,5 +501,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 def run_bot():
     main()
